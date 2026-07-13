@@ -30,6 +30,7 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
   const elements = pages[currentPageIndex] || [];
 
   const [isAutoFillOpen, setIsAutoFillOpen] = useState(false);
+  const [autoFillScale, setAutoFillScale] = useState(90);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   
@@ -98,8 +99,9 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
           const images = p.images ? JSON.parse(p.images) : [];
           const src = images.length > 0 ? images[0] : p.imagePath;
           
-          const availableWidth = minDx * 0.95; 
-          const availableHeight = minDy * 0.90; 
+          const scaleFactor = autoFillScale / 100;
+          const availableWidth = minDx * scaleFactor; 
+          const availableHeight = minDy * scaleFactor * (0.90 / 0.95); 
           
           const x = cx - availableWidth / 2;
           const y = cy - availableHeight / 2;
@@ -184,6 +186,15 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
     if (type === "product") {
       const images = item.images ? JSON.parse(item.images) : [];
       const src = images.length > 0 ? images[0] : item.imagePath;
+      
+      const productWidth = 200;
+      const productHeight = 200;
+      const tagWidth = 150;
+      const tagHeight = 120;
+      
+      const activeTag = priceTags.find(t => t.id === activePriceTagId);
+      const isDynamic = activePriceTagId === "dynamic-shape";
+      
       setElements([
         ...elements,
         {
@@ -192,10 +203,39 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
           src,
           x,
           y,
-          width: 200,
-          height: 200,
+          width: productWidth,
+          height: productHeight,
           rotation: 0,
         },
+        {
+          id: uuidv4(),
+          type: "price",
+          bgType: isDynamic ? "shape" : "image",
+          bgSrc: activeTag?.imagePath,
+          bgColor: "#e74c3c",
+          bgBorderRadius: 8,
+          text: item.offerPrice?.toString() || "0",
+          fontSize: 18,
+          fontFamily: "Arial",
+          fontWeight: "bold",
+          fill: "#ffff00",
+          stroke: "#000000",
+          strokeWidth: 0,
+          mrpText: item.mrp?.toString() || "0",
+          mrpFontSize: 14,
+          mrpFill: "#ffffff",
+          mrpFontFamily: "Arial",
+          mrpFontWeight: "normal",
+          mrpFontStyle: "line-through",
+          mrpVisible: item.mrp > item.offerPrice,
+          showPrefix: true,
+          priceLayout: 'stacked',
+          x: x + productWidth / 2 - tagWidth / 2, // Centered below
+          y: y + productHeight - tagHeight / 2, // Overlapping slightly
+          width: tagWidth,
+          height: tagHeight,
+          rotation: 0,
+        }
       ]);
     } else if (type === "text") {
       setElements([
@@ -370,7 +410,26 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
               </div>
             </div>
 
-            <p className="text-sm text-gray-500 mb-6">
+            <div className="mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-gray-700">Product Size & Gap</label>
+                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">{autoFillScale}%</span>
+              </div>
+              <input
+                type="range"
+                min="40"
+                max="100"
+                value={autoFillScale}
+                onChange={(e) => setAutoFillScale(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+              <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-medium uppercase tracking-wider">
+                <span>More Gap</span>
+                <span>Larger Product</span>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-500 mb-4">
               Select products to automatically fill the marked slots on this template. If you select more products than slots, multiple pages will be generated.
             </p>
             
