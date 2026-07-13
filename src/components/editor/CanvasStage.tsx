@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Stage, Layer, Image as KonvaImage, Text, Transformer, Group } from "react-konva";
+import { Stage, Layer, Image as KonvaImage, Text, Transformer, Group, Rect } from "react-konva";
 import useImage from "use-image";
 
 export type ElementType = "product" | "text" | "price";
@@ -36,6 +36,12 @@ export interface CanvasElement {
   
   stroke?: string;
   strokeWidth?: number;
+  
+  bgType?: 'image' | 'shape';
+  bgColor?: string;
+  bgBorderColor?: string;
+  bgBorderWidth?: number;
+  bgBorderRadius?: number;
   
   rotation?: number;
 }
@@ -147,20 +153,24 @@ const PriceTagGroup = ({ element, isSelected, onSelect, onChange }: any) => {
     }
   }, [isSelected]);
 
+  const [offerW, setOfferW] = useState(0);
+  const [mrpW, setMrpW] = useState(0);
+
+  // Measure text on changes
+  useEffect(() => {
+    if (offerRef.current) setOfferW(offerRef.current.getTextWidth());
+    if (mrpRef.current && mrpTextStr) setMrpW(mrpRef.current.getTextWidth());
+    else setMrpW(0);
+  }, [offerTextStr, mrpTextStr, element.fontSize, element.mrpFontSize, element.fontFamily, element.fontWeight, element.fontStyle, element.mrpFontWeight, element.mrpFontStyle]);
+
   // Auto-resize logic
   useEffect(() => {
-    if (!offerRef.current) return;
-    const offerW = offerRef.current.getTextWidth();
-    const offerH = element.fontSize || 32;
-    
-    let mrpW = 0;
-    let mrpH = 0;
-    if (mrpRef.current && mrpTextStr) {
-      mrpW = mrpRef.current.getTextWidth();
-      mrpH = element.mrpFontSize || 24;
-    }
+    if (offerW === 0) return; // Wait for measurement
 
-    const padding = 24; // 12px on each side max padding constraint
+    const offerH = element.fontSize || 32;
+    const mrpH = mrpTextStr ? (element.mrpFontSize || 24) : 0;
+
+    const padding = 16; // 8px on each side max padding constraint
     let reqW = 0;
     let reqH = 0;
 
@@ -172,14 +182,20 @@ const PriceTagGroup = ({ element, isSelected, onSelect, onChange }: any) => {
       reqH = offerH + mrpH + (mrpH > 0 ? 4 : 0) + padding; // 4px gap
     }
 
-    if ((element.width || 0) < reqW || (element.height || 0) < reqH) {
-      onChange({
-        ...element,
-        width: Math.max(element.width || 0, reqW),
-        height: Math.max(element.height || 0, reqH)
-      });
+    if ((element.width || 0) < reqW || (element.height || 0) < reqH || element.bgType === 'shape') {
+      // If it's a dynamic shape, always sync exactly to reqW/reqH
+      const newWidth = element.bgType === 'shape' ? reqW : Math.max(element.width || 0, reqW);
+      const newHeight = element.bgType === 'shape' ? reqH : Math.max(element.height || 0, reqH);
+      
+      if (newWidth !== element.width || newHeight !== element.height) {
+        onChange({
+          ...element,
+          width: newWidth,
+          height: newHeight
+        });
+      }
     }
-  }, [offerTextStr, mrpTextStr, element.fontSize, element.mrpFontSize, element.priceLayout, element.width, element.height, onChange]);
+  }, [offerW, mrpW, offerTextStr, mrpTextStr, element.fontSize, element.mrpFontSize, element.priceLayout, element.width, element.height, element.bgType, onChange]);
 
   const tagW = element.width || 150;
   const tagH = element.height || 150;
@@ -187,15 +203,27 @@ const PriceTagGroup = ({ element, isSelected, onSelect, onChange }: any) => {
   // Centering calculations
   let offerY = 0;
   let mrpY = 0;
+  let offerX = 0;
+  let mrpX = 0;
   
   if (element.priceLayout === 'side-by-side') {
     offerY = (tagH - (element.fontSize || 32)) / 2;
     mrpY = (tagH - (element.mrpFontSize || 24)) / 2;
+    
+    // Total text width for side-by-side
+    const totalW = offerW + mrpW + (mrpW > 0 ? 8 : 0);
+    const startX = (tagW - totalW) / 2;
+    
+    mrpX = startX;
+    offerX = startX + mrpW + (mrpW > 0 ? 8 : 0);
   } else {
     const totalTextH = (element.fontSize || 32) + (mrpTextStr ? (element.mrpFontSize || 24) + 4 : 0);
     const startY = (tagH - totalTextH) / 2;
     offerY = startY;
     mrpY = startY + (element.fontSize || 32) + 4;
+    
+    offerX = (tagW - offerW) / 2;
+    mrpX = (tagW - mrpW) / 2;
   }
 
   return (
@@ -232,7 +260,20 @@ const PriceTagGroup = ({ element, isSelected, onSelect, onChange }: any) => {
           });
         }}
       >
-        {bgImage && (
+        {element.bgType === 'shape' || !element.bgSrc ? (
+          <Rect
+             width={tagW}
+             height={tagH}
+             fill={element.bgColor || "#e74c3c"}
+             cornerRadius={element.bgBorderRadius || 8}
+             stroke={element.bgBorderColor || "#c0392b"}
+             strokeWidth={element.bgBorderWidth || 0}
+             shadowColor="black"
+             shadowBlur={4}
+             shadowOpacity={0.2}
+             shadowOffsetY={2}
+          />
+        ) : bgImage && (
           <KonvaImage
             image={bgImage}
             width={tagW}
@@ -245,15 +286,13 @@ const PriceTagGroup = ({ element, isSelected, onSelect, onChange }: any) => {
           <Text
             ref={mrpRef}
             text={mrpTextStr}
-            width={element.priceLayout === 'side-by-side' ? undefined : tagW}
-            x={element.priceLayout === 'side-by-side' ? (offerRef.current ? tagW/2 + 4 : tagW/2) : 0}
+            x={mrpX}
             y={mrpY}
             fontSize={element.mrpFontSize || 24}
             fontFamily={element.mrpFontFamily || "Arial"}
             fontStyle={`${element.mrpFontStyle || "normal"} ${element.mrpFontWeight || "normal"}`}
             fill={element.mrpFill || "white"}
-            align={element.priceLayout === 'side-by-side' ? "left" : "center"}
-            textDecoration="line-through"
+            textDecoration={element.mrpFontStyle?.includes("line-through") ? "line-through" : undefined}
           />
         )}
         
@@ -261,8 +300,7 @@ const PriceTagGroup = ({ element, isSelected, onSelect, onChange }: any) => {
         <Text
           ref={offerRef}
           text={offerTextStr}
-          width={element.priceLayout === 'side-by-side' ? undefined : tagW}
-          x={element.priceLayout === 'side-by-side' ? (mrpTextStr && offerRef.current ? tagW/2 - offerRef.current.getTextWidth() - 4 : 0) : 0}
+          x={offerX}
           y={offerY}
           fontSize={element.fontSize || 32}
           fontFamily={element.fontFamily || "Arial"}
@@ -270,7 +308,6 @@ const PriceTagGroup = ({ element, isSelected, onSelect, onChange }: any) => {
           fill={element.fill || "black"}
           stroke={element.stroke || undefined}
           strokeWidth={element.strokeWidth || 0}
-          align={element.priceLayout === 'side-by-side' ? (mrpTextStr ? "right" : "center") : "center"}
         />
       </Group>
       {isSelected && (
