@@ -1,6 +1,7 @@
 import React from "react";
-import { ZoomIn, ZoomOut, Maximize, Wand2, Download, Save } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize, Wand2, Download, Save, Undo, Redo } from "lucide-react";
 import { useEditorStore } from "@/store/useEditorStore";
+import { useStore } from "zustand";
 
 interface TopToolbarProps {
   onAutoFillClick: () => void;
@@ -10,6 +11,9 @@ interface TopToolbarProps {
 
 export function TopToolbar({ onAutoFillClick, onExportClick, onSaveClick }: TopToolbarProps) {
   const { template, zoomLevel, setZoomLevel } = useEditorStore();
+  
+  // Use zundo's temporal store to reactively get history state
+  const { pastStates, futureStates } = useStore(useEditorStore.temporal, (state) => state);
 
   if (!template) return null;
 
@@ -24,32 +28,55 @@ export function TopToolbar({ onAutoFillClick, onExportClick, onSaveClick }: TopT
         </span>
       </div>
       
-      <div className="flex items-center gap-1 bg-gray-50/80 backdrop-blur p-1 rounded-lg border border-gray-200/60 shadow-sm flex-none">
-        <button 
-          onClick={() => setZoomLevel(Math.max(0.1, zoomLevel - 0.1))} 
-          className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-gray-600 transition-all active:scale-95"
-          title="Zoom Out"
-        >
-          <ZoomOut className="h-4 w-4" />
-        </button>
-        <span className="text-[11px] font-semibold w-12 text-center text-gray-700 select-none">
-          {Math.round(zoomLevel * 100)}%
-        </span>
-        <button 
-          onClick={() => setZoomLevel(zoomLevel + 0.1)} 
-          className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-gray-600 transition-all active:scale-95"
-          title="Zoom In"
-        >
-          <ZoomIn className="h-4 w-4" />
-        </button>
-        <div className="w-[1px] h-4 bg-gray-300 mx-1"></div>
-        <button 
-          onClick={() => setZoomLevel(1)} 
-          className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-gray-600 transition-all active:scale-95"
-          title="Fit to Screen"
-        >
-          <Maximize className="h-4 w-4" />
-        </button>
+      <div className="flex items-center gap-2">
+        {/* Undo / Redo */}
+        <div className="flex items-center gap-1 bg-gray-50/80 backdrop-blur p-1 rounded-lg border border-gray-200/60 shadow-sm">
+          <button 
+            onClick={() => useEditorStore.temporal.getState().undo()}
+            disabled={pastStates.length === 0}
+            className={`p-1.5 rounded-md transition-all active:scale-95 ${pastStates.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-white hover:shadow-sm'}`}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo className="h-4 w-4" />
+          </button>
+          <button 
+            onClick={() => useEditorStore.temporal.getState().redo()}
+            disabled={futureStates.length === 0}
+            className={`p-1.5 rounded-md transition-all active:scale-95 ${futureStates.length === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-white hover:shadow-sm'}`}
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <Redo className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Zoom */}
+        <div className="flex items-center gap-1 bg-gray-50/80 backdrop-blur p-1 rounded-lg border border-gray-200/60 shadow-sm flex-none">
+          <button 
+            onClick={() => setZoomLevel(Math.max(0.1, zoomLevel - 0.1))} 
+            className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-gray-600 transition-all active:scale-95"
+            title="Zoom Out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <span className="text-[11px] font-semibold w-12 text-center text-gray-700 select-none">
+            {Math.round(zoomLevel * 100)}%
+          </span>
+          <button 
+            onClick={() => setZoomLevel(zoomLevel + 0.1)} 
+            className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-gray-600 transition-all active:scale-95"
+            title="Zoom In"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <div className="w-[1px] h-4 bg-gray-300 mx-1"></div>
+          <button 
+            onClick={() => setZoomLevel(1)} 
+            className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-gray-600 transition-all active:scale-95"
+            title="Fit to Screen"
+          >
+            <Maximize className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 flex-1 justify-end">

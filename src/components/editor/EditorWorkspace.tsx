@@ -30,7 +30,9 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
   const elements = pages[currentPageIndex] || [];
 
   const [isAutoFillOpen, setIsAutoFillOpen] = useState(false);
-  const [autoFillScale, setAutoFillScale] = useState(90);
+  const [autoFillScale, setAutoFillScale] = useState(80);
+  const [showProductName, setShowProductName] = useState(true);
+  const [maxProductsPerPage, setMaxProductsPerPage] = useState(12);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   
@@ -48,6 +50,23 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
       else setActivePriceTagId("dynamic-shape");
     });
   }, [initialTemplate, setTemplate, setProducts, setCategories, setPriceTags, setActivePriceTagId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+Z or Cmd+Z (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          useEditorStore.temporal.getState().redo();
+        } else {
+          useEditorStore.temporal.getState().undo();
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (containerRef.current && template) {
@@ -71,92 +90,190 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
       
       const activeTag = priceTags.find(t => t.id === activePriceTagId);
       const productsToFill = products.filter(p => selectedProductIds.includes(p.id));
-      
-      const centers = slots.map((s: any) => ({ cx: s.x + s.width / 2, cy: s.y + s.height / 2 }));
-      let minDx = template.width;
-      let minDy = template.height;
-      for (let i = 0; i < centers.length; i++) {
-        for (let j = i + 1; j < centers.length; j++) {
-           const dx = Math.abs(centers[i].cx - centers[j].cx);
-           const dy = Math.abs(centers[i].cy - centers[j].cy);
-           if (dx > 10 && dx < minDx) minDx = dx;
-           if (dy > 10 && dy < minDy) minDy = dy;
-        }
-      }
-      
-      if (minDx === template.width) minDx = template.width / (slots.length > 1 ? slots.length : 2);
-      if (minDy === template.height) minDy = template.height / 3;
-
       const newPages: CanvasElement[][] = [];
-      for (let i = 0; i < productsToFill.length; i += slots.length) {
-        const chunk = productsToFill.slice(i, i + slots.length);
-        const pageElements: CanvasElement[] = [];
+
+      if (slots.length === 1) {
+        // Dynamic Content Area Mode
+        const contentArea = slots[0];
         
-        chunk.forEach((p, index) => {
-          const slot = slots[index];
-          const cx = slot.x + slot.width / 2;
-          const cy = slot.y + slot.height / 2;
-          const images = p.images ? JSON.parse(p.images) : [];
-          const src = images.length > 0 ? images[0] : p.imagePath;
+        for (let i = 0; i < productsToFill.length; i += maxProductsPerPage) {
+          const chunk = productsToFill.slice(i, i + maxProductsPerPage);
+          const pageElements: CanvasElement[] = [];
+          const N = chunk.length;
           
-          const scaleFactor = autoFillScale / 100;
-          const availableWidth = minDx * scaleFactor; 
-          const availableHeight = minDy * scaleFactor * (0.90 / 0.95); 
+          // Find optimal grid to maximize cell size (assuming square products)
+          let bestCols = 1;
+          let maxCellSize = 0;
+          for (let c = 1; c <= N; c++) {
+            const r = Math.ceil(N / c);
+            const cellW = contentArea.width / c;
+            const cellH = contentArea.height / r;
+            const size = Math.min(cellW, cellH);
+            if (size > maxCellSize) {
+              maxCellSize = size;
+              bestCols = c;
+            }
+          }
           
-          const x = cx - availableWidth / 2;
-          const y = cy - availableHeight / 2;
+          let cols = bestCols;
+          let rows = Math.ceil(N / cols);
           
-          pageElements.push({
-            id: uuidv4(),
-            type: "product",
-            src,
-            x,
-            y,
-            width: availableWidth,
-            height: availableHeight,
-            rotation: 0,
+          const cellWidth = contentArea.width / cols;
+          const cellHeight = contentArea.height / rows;
+          
+          chunk.forEach((p, index) => {
+            // For the last row, it might not be full, so we need to center it!
+            const r = Math.floor(index / cols);
+            const itemsInThisRow = (r === rows - 1 && N % cols !== 0) ? (N % cols) : cols;
+            
+            // Calculate column index adjusted for centering the last row
+            const cIndex = index % cols;
+            const emptySpaceWidth = contentArea.width - (itemsInThisRow * cellWidth);
+            const startX = contentArea.x + (emptySpaceWidth / 2);
+            
+            const cx = startX + (cIndex * cellWidth) + (cellWidth / 2);
+            const cy = contentArea.y + (r * cellHeight) + (cellHeight / 2);
+            
+            const scaleFactor = autoFillScale / 100;
+            const availableWidth = cellWidth * 0.9 * scaleFactor;
+            const availableHeight = cellHeight * 0.8 * scaleFactor;
+            
+            const x = cx - availableWidth / 2;
+            const y = cy - availableHeight / 2;
+            
+            const images = p.images ? JSON.parse(p.images) : [];
+            const src = images.length > 0 ? images[0] : p.imagePath;
+            
+            const isDynamic = activePriceTagId === "dynamic-shape";
+            const randomRotation = Math.floor(Math.random() * 21) - 10; 
+            
+            pageElements.push({
+              id: uuidv4(),
+              type: "product-group",
+              src,
+              x,
+              y,
+              width: availableWidth,
+              height: availableHeight,
+              rotation: 0,
+              
+              // Product Name properties
+              productName: p.name,
+              productNameFontSize: 16,
+              productNameColor: "#000000",
+              productNameVisible: showProductName,
+              
+              // Price Tag properties
+              bgType: isDynamic ? "shape" : "image",
+              bgSrc: activeTag?.imagePath,
+              bgColor: "#e74c3c",
+              bgBorderRadius: 8,
+              text: p.offerPrice?.toString() || "0",
+              fontSize: 24,
+              fontFamily: "Arial",
+              fontWeight: "bold",
+              fill: "#ffff00",
+              stroke: "#000000",
+              strokeWidth: 0,
+              mrpText: p.mrp?.toString() || "0",
+              mrpFontSize: 18,
+              mrpFill: "#ffffff",
+              mrpFontFamily: "Arial",
+              mrpFontWeight: "normal",
+              mrpFontStyle: "line-through",
+              mrpVisible: p.mrp > p.offerPrice,
+              showPrefix: true,
+              priceLayout: 'stacked',
+              
+              // Default tag size before auto-resize kicks in
+              priceTagWidth: 150,
+              priceTagHeight: 120,
+            });
+          });
+          newPages.push(pageElements);
+        }
+      } else {
+        // Fixed Slots Mode (Backward Compatibility)
+        const centers = slots.map((s: any) => ({ cx: s.x + s.width / 2, cy: s.y + s.height / 2 }));
+        let minDx = template.width;
+        let minDy = template.height;
+        for (let i = 0; i < centers.length; i++) {
+          for (let j = i + 1; j < centers.length; j++) {
+             const dx = Math.abs(centers[i].cx - centers[j].cx);
+             const dy = Math.abs(centers[i].cy - centers[j].cy);
+             if (dx > 10 && dx < minDx) minDx = dx;
+             if (dy > 10 && dy < minDy) minDy = dy;
+          }
+        }
+        
+        if (minDx === template.width) minDx = template.width / (slots.length > 1 ? slots.length : 2);
+        if (minDy === template.height) minDy = template.height / 3;
+
+        for (let i = 0; i < productsToFill.length; i += slots.length) {
+          const chunk = productsToFill.slice(i, i + slots.length);
+          const pageElements: CanvasElement[] = [];
+          
+          chunk.forEach((p, index) => {
+            const slot = slots[index];
+            const cx = slot.x + slot.width / 2;
+            const cy = slot.y + slot.height / 2;
+            const images = p.images ? JSON.parse(p.images) : [];
+            const src = images.length > 0 ? images[0] : p.imagePath;
+            
+            const scaleFactor = autoFillScale / 100;
+            const availableWidth = minDx * scaleFactor; 
+            const availableHeight = minDy * scaleFactor * (0.90 / 0.95); 
+            
+            const x = cx - availableWidth / 2;
+            const y = cy - availableHeight / 2;
+            
+            const isDynamic = activePriceTagId === "dynamic-shape";
+            
+            pageElements.push({
+              id: uuidv4(),
+              type: "product-group",
+              src,
+              x,
+              y,
+              width: availableWidth,
+              height: availableHeight,
+              rotation: 0,
+              
+              // Product Name properties
+              productName: p.name,
+              productNameFontSize: 16,
+              productNameColor: "#000000",
+              productNameVisible: true,
+              
+              // Price Tag properties
+              bgType: isDynamic ? "shape" : "image",
+              bgSrc: activeTag?.imagePath,
+              bgColor: "#e74c3c",
+              bgBorderRadius: 8,
+              text: p.offerPrice?.toString() || "0",
+              fontSize: 24,
+              fontFamily: "Arial",
+              fontWeight: "bold",
+              fill: "#ffff00",
+              stroke: "#000000",
+              strokeWidth: 0,
+              mrpText: p.mrp?.toString() || "0",
+              mrpFontSize: 18,
+              mrpFill: "#ffffff",
+              mrpFontFamily: "Arial",
+              mrpFontWeight: "normal",
+              mrpFontStyle: "line-through",
+              mrpVisible: p.mrp > p.offerPrice,
+              showPrefix: true,
+              priceLayout: 'stacked',
+              
+              priceTagWidth: 150,
+              priceTagHeight: 120,
+            });
           });
           
-          const tagWidth = 150;
-          const tagHeight = 120;
-          const tagX = cx - tagWidth / 2;
-          const tagY = cy + availableHeight / 2 - tagHeight / 2 - 20;
-          
-          const isDynamic = activePriceTagId === "dynamic-shape";
-          const randomRotation = Math.floor(Math.random() * 21) - 10; 
-          
-          pageElements.push({
-            id: uuidv4(),
-            type: "price",
-            bgType: isDynamic ? "shape" : "image",
-            bgSrc: activeTag?.imagePath,
-            bgColor: "#e74c3c",
-            bgBorderRadius: 8,
-            text: p.offerPrice?.toString() || "0",
-            fontSize: 18,
-            fontFamily: "Arial",
-            fontWeight: "bold",
-            fill: "#ffff00",
-            stroke: "#000000",
-            strokeWidth: 0,
-            mrpText: p.mrp?.toString() || "0",
-            mrpFontSize: 14,
-            mrpFill: "#ffffff",
-            mrpFontFamily: "Arial",
-            mrpFontWeight: "normal",
-            mrpFontStyle: "line-through",
-            mrpVisible: p.mrp > p.offerPrice,
-            showPrefix: true,
-            priceLayout: 'stacked',
-            x: tagX,
-            y: tagY,
-            width: tagWidth,
-            height: tagHeight,
-            rotation: randomRotation,
-          });
-        });
-        
-        newPages.push(pageElements);
+          newPages.push(pageElements);
+        }
       }
       
       if (newPages.length > 0) {
@@ -410,23 +527,46 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
               </div>
             </div>
 
-            <div className="mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-gray-700">Product Size & Gap</label>
-                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">{autoFillScale}%</span>
+            <div className="mb-6 grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold text-gray-700">Product Size & Gap</label>
+                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">{autoFillScale}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="40"
+                  max="100"
+                  value={autoFillScale}
+                  onChange={(e) => setAutoFillScale(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+                <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-medium uppercase tracking-wider">
+                  <span>More Gap</span>
+                  <span>Larger</span>
+                </div>
               </div>
-              <input
-                type="range"
-                min="40"
-                max="100"
-                value={autoFillScale}
-                onChange={(e) => setAutoFillScale(parseInt(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-              />
-              <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-medium uppercase tracking-wider">
-                <span>More Gap</span>
-                <span>Larger Product</span>
-              </div>
+              
+              {JSON.parse(template?.slotsData || "[]").length === 1 && (
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-semibold text-gray-700">Max Per Page</label>
+                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">{maxProductsPerPage}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="48"
+                    value={maxProductsPerPage}
+                    onChange={(e) => setMaxProductsPerPage(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-medium uppercase tracking-wider">
+                    <span>1</span>
+                    <span>48</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <p className="text-sm text-gray-500 mb-4">
@@ -449,6 +589,17 @@ export function EditorWorkspace({ template: initialTemplate }: { template: any }
                 />
                 Select All
               </label>
+              
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-gray-700">
+                <input 
+                  type="checkbox" 
+                  checked={showProductName}
+                  onChange={(e) => setShowProductName(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                />
+                Show Product Names
+              </label>
+
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{selectedProductIds.length} Selected</span>
             </div>
             

@@ -23,7 +23,55 @@ export function RightInspector() {
       </div>
       
       <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
-        {(selectedElement.type === "text" || selectedElement.type === "price") && (
+        {selectedElement.type === "product-group" && (
+          <div className="space-y-4 pb-6 border-b border-gray-100">
+            <h4 className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">Product Name</h4>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Show Name</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={selectedElement.productNameVisible !== false} onChange={(e) => updateSelectedElement({ productNameVisible: e.target.checked })} />
+                <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+            {selectedElement.productNameVisible !== false && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Name Text</label>
+                  <textarea
+                    value={selectedElement.productName || ""}
+                    onChange={(e) => updateSelectedElement({ productName: e.target.value })}
+                    className="block w-full rounded-lg border-gray-200 bg-gray-50 p-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                    rows={2}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Font Size</label>
+                    <input
+                      type="number"
+                      value={selectedElement.productNameFontSize || 16}
+                      onChange={(e) => updateSelectedElement({ productNameFontSize: parseInt(e.target.value) })}
+                      className="block w-full rounded-lg border-gray-200 bg-gray-50 p-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Color</label>
+                    <div className="flex items-center gap-2 block w-full rounded-lg border border-gray-200 bg-gray-50 p-1.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500 transition-all shadow-sm">
+                      <input
+                        type="color"
+                        value={selectedElement.productNameColor || "#000000"}
+                        onChange={(e) => updateSelectedElement({ productNameColor: e.target.value })}
+                        className="h-6 w-6 rounded-md cursor-pointer border-0 bg-transparent p-0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {(selectedElement.type === "text" || selectedElement.type === "price" || selectedElement.type === "product-group") && (
           <div className="space-y-6">
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Text Content</label>
@@ -132,7 +180,7 @@ export function RightInspector() {
           </div>
         )}
 
-        {selectedElement.type === "price" && (
+        {(selectedElement.type === "price" || selectedElement.type === "product-group") && (
           <div className="pt-6 border-t border-gray-100 space-y-6">
             <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Regular Price (MRP)</h4>
             
@@ -215,6 +263,23 @@ export function RightInspector() {
               </>
             )}
             
+            {/* Tag Background Settings */}
+            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pt-6 border-t border-gray-100">Tag Background</h4>
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => updateSelectedElement({ bgType: 'image' })}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded capitalize transition-all ${selectedElement.bgType !== 'shape' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Image
+              </button>
+              <button
+                onClick={() => updateSelectedElement({ bgType: 'shape' })}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded capitalize transition-all ${selectedElement.bgType === 'shape' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Dynamic Shape
+              </button>
+            </div>
+            
             <div className="flex items-center justify-between border-t border-gray-100 pt-4">
               <span className="text-sm font-medium text-gray-700">Show 'SAR' Prefix</span>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -290,16 +355,19 @@ export function RightInspector() {
                     bgColor: selectedElement.bgColor,
                     bgBorderRadius: selectedElement.bgBorderRadius,
                     bgBorderColor: selectedElement.bgBorderColor,
-                    bgBorderWidth: selectedElement.bgBorderWidth
+                    bgBorderWidth: selectedElement.bgBorderWidth,
+                    productNameVisible: selectedElement.productNameVisible,
+                    productNameFontSize: selectedElement.productNameFontSize,
+                    productNameColor: selectedElement.productNameColor
                   };
                   setPages(pages.map(page => 
-                    page.map(el => el.type === 'price' ? { ...el, ...styleProps } : el)
+                    page.map(el => (el.type === 'price' || el.type === 'product-group') ? { ...el, ...styleProps } : el)
                   ));
-                  alert("Style and size applied to all price tags!");
+                  alert("Style applied to all products and price tags!");
                 }}
                 className="w-full py-2 px-4 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition-all shadow-sm active:scale-95"
               >
-                Apply Style to All Price Tags
+                Apply Style to All Products & Tags
               </button>
             </div>
           </div>

@@ -35,6 +35,7 @@
     "use-image": "^1.1.4",
     "uuid": "^14.0.1",
     "zod": "^4.4.3",
+    "zundo": "^2.3.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

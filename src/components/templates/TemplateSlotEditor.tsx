@@ -59,12 +59,15 @@ export function TemplateSlotEditor({ template }: { template: any }) {
   }, [selectedIds, slots]);
 
   const addSlot = () => {
+    // If no slots exist, encourage the "Content Area" by making a large default box
+    const isFirstSlot = slots.length === 0;
+    
     const newSlot: Slot = {
       id: uuidv4(),
-      x: template.width / 2 - 150,
-      y: template.height / 2 - 150,
-      width: 300,
-      height: 300,
+      x: isFirstSlot ? template.width * 0.05 : template.width / 2 - 150,
+      y: isFirstSlot ? template.height * 0.2 : template.height / 2 - 150,
+      width: isFirstSlot ? template.width * 0.9 : 300,
+      height: isFirstSlot ? template.height * 0.6 : 300,
     };
     setSlots([...slots, newSlot]);
     setSelectedIds([newSlot.id]);
@@ -100,30 +103,7 @@ export function TemplateSlotEditor({ template }: { template: any }) {
 
   const handleDragEnd = (e: any, id: string) => {
     const node = e.target;
-    setSlots(slots.map(s => s.id === id ? { ...s, x: node.x(), y: node.y() } : s));
-  };
-
-  const handleTransformEnd = (e: any) => {
-    // We update all selected slots based on their new bounds
-    setSlots(prevSlots => prevSlots.map(s => {
-      if (selectedIds.includes(s.id)) {
-        const node = rectRefs.current[s.id];
-        if (node) {
-          const scaleX = node.scaleX();
-          const scaleY = node.scaleY();
-          node.scaleX(1);
-          node.scaleY(1);
-          return {
-            ...s,
-            x: node.x(),
-            y: node.y(),
-            width: Math.max(50, node.width() * scaleX),
-            height: Math.max(50, node.height() * scaleY),
-          };
-        }
-      }
-      return s;
-    }));
+    setSlots(prev => prev.map(s => s.id === id ? { ...s, x: node.x(), y: node.y() } : s));
   };
 
   const handleGenerateGrid = () => {
@@ -222,9 +202,9 @@ export function TemplateSlotEditor({ template }: { template: any }) {
           <div className="flex gap-2 mb-4">
             <button 
               onClick={addSlot}
-              className="w-full bg-blue-600 text-white font-semibold rounded p-2 hover:bg-blue-500 transition text-sm"
+              className={`w-full text-white font-semibold rounded p-2 transition text-sm ${slots.length === 0 ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-blue-600 hover:bg-blue-500'}`}
             >
-              + Add Slot
+              {slots.length === 0 ? '+ Add Dynamic Content Area' : '+ Add Fixed Slot'}
             </button>
           </div>
 
@@ -356,12 +336,32 @@ export function TemplateSlotEditor({ template }: { template: any }) {
                     setSelectedIds([slot.id]);
                   }}
                   onDragEnd={(e) => handleDragEnd(e, slot.id)}
+                  onTransformEnd={(e) => {
+                    const node = rectRefs.current[slot.id];
+                    if (node) {
+                      const scaleX = node.scaleX();
+                      const scaleY = node.scaleY();
+                      node.scaleX(1);
+                      node.scaleY(1);
+                      setSlots(prev => prev.map(s => {
+                        if (s.id === slot.id) {
+                          return {
+                            ...s,
+                            x: node.x(),
+                            y: node.y(),
+                            width: Math.max(50, node.width() * scaleX),
+                            height: Math.max(50, node.height() * scaleY),
+                          };
+                        }
+                        return s;
+                      }));
+                    }
+                  }}
                 />
               ))}
               {selectedIds.length > 0 && (
                 <Transformer
                   ref={trRef}
-                  onTransformEnd={handleTransformEnd}
                   boundBoxFunc={(oldBox, newBox) => {
                     if (newBox.width < 50 || newBox.height < 50) return oldBox;
                     return newBox;
